@@ -1,0 +1,63 @@
+name: Build yuhaiin APK with SNI Spoof
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_ip:
+        description: 'Target IP for SNI spoof'
+        required: false
+        default: '104.19.229.21'
+      fake_sni:
+        description: 'Fake SNI domain'
+        required: false
+        default: 'www.hcaptcha.com'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+        
+    - name: Setup Java (for Android build)
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+        
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      
+    - name: Setup Android NDK
+      run: |
+        echo "y" | sudo ${ANDROID_HOME}/tools/bin/sdkmanager --install "ndk;25.1.8937393"
+        
+    - name: Create custom config
+      run: |
+        mkdir -p app/src/main/assets
+        cat > app/src/main/assets/sni_config.json << EOF
+        {
+          "enabled": true,
+          "target_ip": "${{ github.event.inputs.target_ip }}",
+          "target_port": 443,
+          "fake_sni": "${{ github.event.inputs.fake_sni }}"
+        }
+        EOF
+        cat app/src/main/assets/sni_config.json
+        
+    - name: Build Android APK
+      run: |
+        chmod +x gradlew
+        ./gradlew assembleRelease
+        
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: yuhaiin-sni-spoof
+        path: app/build/outputs/apk/release/*.apk
