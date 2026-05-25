@@ -25,18 +25,24 @@ jobs:
       with:
         go-version: '1.21'
         
-    - name: Setup Java (for Android build)
+    - name: Setup Java
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
-        java-version: '17'
+        java-version: '11'  # Changed from 17 to 11 for compatibility
         
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       
-    - name: Setup Android NDK
+    - name: Install Android NDK (alternative method)
       run: |
-        echo "y" | sudo ${ANDROID_HOME}/tools/bin/sdkmanager --install "ndk;25.1.8937393"
+        # Download NDK directly instead of using sdkmanager
+        cd /tmp
+        wget -q https://dl.google.com/android/repository/android-ndk-r25c-linux.zip
+        unzip -q android-ndk-r25c-linux.zip
+        sudo mv android-ndk-r25c /usr/local/android-ndk
+        echo "ANDROID_NDK_HOME=/usr/local/android-ndk" >> $GITHUB_ENV
+        echo "PATH=/usr/local/android-ndk:$PATH" >> $GITHUB_ENV
         
     - name: Create custom config
       run: |
@@ -49,15 +55,27 @@ jobs:
           "fake_sni": "${{ github.event.inputs.fake_sni }}"
         }
         EOF
+        echo "Config created:"
         cat app/src/main/assets/sni_config.json
         
+    - name: Setup gradle permissions
+      run: chmod +x gradlew
+      
     - name: Build Android APK
       run: |
-        chmod +x gradlew
-        ./gradlew assembleRelease
+        # Set NDK path for gradle
+        export ANDROID_NDK_HOME=/usr/local/android-ndk
+        ./gradlew assembleRelease --no-daemon
+        
+    - name: List build outputs
+      run: |
+        echo "Checking for APK files..."
+        find . -name "*.apk" -type f
         
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: yuhaiin-sni-spoof
-        path: app/build/outputs/apk/release/*.apk
+        path: |
+          app/build/outputs/apk/release/*.apk
+          app/build/outputs/apk/*/*.apk
