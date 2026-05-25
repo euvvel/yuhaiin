@@ -1,4 +1,4 @@
-name: Build yuhaiin APK with SNI Spoof
+name: Build yuhaiin Android APK
 
 on:
   workflow_dispatch:
@@ -25,7 +25,7 @@ jobs:
       with:
         go-version: '1.21'
         
-    - name: Setup Java 17 (Required for Android SDK)
+    - name: Setup Java
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
@@ -34,20 +34,27 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       with:
-        # Skip JDK version check since we already have Java 17
         skip-jdk-check: true
         
     - name: Install NDK
       run: |
-        # Download NDK directly - most reliable method
-        cd $ANDROID_HOME
-        wget -q https://dl.google.com/android/repository/android-ndk-r25c-linux.zip
-        unzip -q android-ndk-r25c-linux.zip
-        echo "ANDROID_NDK_HOME=$ANDROID_HOME/android-ndk-r25c" >> $GITHUB_ENV
+        echo "y" | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.1.8937393"
         
-    - name: Create custom config
+    - name: Install gomobile
       run: |
-        mkdir -p app/src/main/assets
+        go install golang.org/x/mobile/cmd/gomobile@latest
+        go install golang.org/x/mobile/cmd/gobind@latest
+        ~/go/bin/gomobile init
+        
+    - name: Set environment variables
+      run: |
+        echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.1.8937393" >> $GITHUB_ENV
+        echo "PATH=$PATH:~/go/bin" >> $GITHUB_ENV
+        
+    - name: Update config with workflow inputs
+      run: |
+        # Update the config file with workflow inputs
         cat > app/src/main/assets/sni_config.json << EOF
         {
           "enabled": true,
@@ -56,27 +63,18 @@ jobs:
           "fake_sni": "${{ github.event.inputs.fake_sni }}"
         }
         EOF
-        echo "✅ Config created:"
+        echo "Config updated:"
         cat app/src/main/assets/sni_config.json
         
-    - name: Setup gradle permissions
-      run: chmod +x gradlew
-      
     - name: Build Android APK
       run: |
-        export ANDROID_NDK_HOME=$ANDROID_HOME/android-ndk-r25c
-        ./gradlew assembleRelease --no-daemon
-        
-    - name: Find and upload APK
-      run: |
-        echo "Looking for APK files..."
-        find app/build -name "*.apk" -type f
-        # Copy APK to a known location
-        mkdir -p artifacts
-        find app/build -name "*.apk" -type f -exec cp {} artifacts/ \;
+        # Use make to build Android APK (not gradlew)
+        make android
         
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: yuhaiin-sni-spoof
-        path: artifacts/*.apk
+        path: |
+          build/*.apk
+          *.apk
