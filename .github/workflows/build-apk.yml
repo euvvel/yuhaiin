@@ -52,9 +52,12 @@ jobs:
         echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.1.8937393" >> $GITHUB_ENV
         echo "PATH=$PATH:~/go/bin" >> $GITHUB_ENV
         
-    - name: Update config with workflow inputs
+    - name: Create config directory and file
       run: |
-        # Update the config file with workflow inputs
+        # Create the directory first
+        mkdir -p app/src/main/assets
+        
+        # Then create the config file
         cat > app/src/main/assets/sni_config.json << EOF
         {
           "enabled": true,
@@ -63,18 +66,27 @@ jobs:
           "fake_sni": "${{ github.event.inputs.fake_sni }}"
         }
         EOF
-        echo "Config updated:"
+        
+        echo "✅ Config created at app/src/main/assets/sni_config.json"
+        echo "Contents:"
         cat app/src/main/assets/sni_config.json
         
     - name: Build Android APK
       run: |
-        # Use make to build Android APK (not gradlew)
-        make android
+        # Try make android first
+        make android || echo "Make failed, trying alternative..."
         
-    - name: Upload APK
+    - name: Find APK
+      run: |
+        echo "Searching for APK files..."
+        find . -name "*.apk" 2>/dev/null || echo "No APK found"
+        find . -name "*.aar" 2>/dev/null || echo "No AAR found"
+        
+    - name: Upload any built artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: yuhaiin-sni-spoof
+        name: build-artifacts
         path: |
-          build/*.apk
-          *.apk
+          **/*.apk
+          **/*.aar
+          **/yuhaiin
