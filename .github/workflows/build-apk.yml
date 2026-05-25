@@ -1,14 +1,14 @@
-name: Build yuhaiin APK with SNI Spoof
+name: Build yuhaiin APK (Simple)
 
 on:
   workflow_dispatch:
     inputs:
       target_ip:
-        description: 'Target IP for SNI spoof'
+        description: 'Target IP'
         required: false
         default: '104.19.229.21'
       fake_sni:
-        description: 'Fake SNI domain'
+        description: 'Fake SNI'
         required: false
         default: 'www.hcaptcha.com'
 
@@ -29,22 +29,18 @@ jobs:
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
-        java-version: '11'  # Changed from 17 to 11 for compatibility
+        java-version: '11'
         
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       
-    - name: Install Android NDK (alternative method)
+    - name: Install NDK via sdkmanager with Java 11
       run: |
-        # Download NDK directly instead of using sdkmanager
-        cd /tmp
-        wget -q https://dl.google.com/android/repository/android-ndk-r25c-linux.zip
-        unzip -q android-ndk-r25c-linux.zip
-        sudo mv android-ndk-r25c /usr/local/android-ndk
-        echo "ANDROID_NDK_HOME=/usr/local/android-ndk" >> $GITHUB_ENV
-        echo "PATH=/usr/local/android-ndk:$PATH" >> $GITHUB_ENV
+        # Use Java 11 for sdkmanager
+        export JAVA_HOME=$JAVA_HOME_11_X64
+        echo "y" | ${ANDROID_HOME}/tools/bin/sdkmanager --install "ndk;25.1.8937393"
         
-    - name: Create custom config
+    - name: Create config
       run: |
         mkdir -p app/src/main/assets
         cat > app/src/main/assets/sni_config.json << EOF
@@ -55,27 +51,14 @@ jobs:
           "fake_sni": "${{ github.event.inputs.fake_sni }}"
         }
         EOF
-        echo "Config created:"
-        cat app/src/main/assets/sni_config.json
         
-    - name: Setup gradle permissions
-      run: chmod +x gradlew
-      
-    - name: Build Android APK
+    - name: Build
       run: |
-        # Set NDK path for gradle
-        export ANDROID_NDK_HOME=/usr/local/android-ndk
+        chmod +x gradlew
         ./gradlew assembleRelease --no-daemon
-        
-    - name: List build outputs
-      run: |
-        echo "Checking for APK files..."
-        find . -name "*.apk" -type f
         
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: yuhaiin-sni-spoof
-        path: |
-          app/build/outputs/apk/release/*.apk
-          app/build/outputs/apk/*/*.apk
+        path: app/build/outputs/apk/release/*.apk
